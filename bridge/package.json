@@ -1,0 +1,32 @@
+{
+  "name": "@flax/mcp-bridge",
+  "version": "1.0.0",
+  "description": "Standalone WebSocket bridge between Flax Engine and MCP Server",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "flax-mcp-bridge": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ws": "^8.16.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.10",
+    "@types/uuid": "^9.0.7",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.0",
+    "tsx": "^4.7.0",
+    "eslint": "^8.56.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

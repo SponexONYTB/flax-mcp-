@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "flax-mcp": {
+      "command": "node",
+      "args": [
+        "${FLAX_MCP_PATH}/server/dist/index.js"
+      ],
+      "env": {
+        "FLAX_WS_HOST": "localhost",
+        "FLAX_WS_PORT": "7777"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}

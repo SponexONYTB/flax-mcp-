@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "flax-mcp": {
+      "command": "node",
+      "args": [
+        "C:/path/to/flax-mcp/server/dist/index.js"
+      ],
+      "env": {
+        "FLAX_WS_HOST": "localhost",
+        "FLAX_WS_PORT": "7777",
+        "FLAX_WS_RECONNECT_MS": "3000",
+        "FLAX_WS_MAX_RETRIES": "10",
+        "FLAX_WS_TIMEOUT_MS": "30000",
+        "FLAX_TOOL_WHITELIST": "{}"
+      },
+      "disabled": false,
+      "autoApprove": [
+        "get_scene_hierarchy",
+        "get_editor_state",
+        "get_active_scene",
+        "ping",
+        "get_tool_list"
+      ]
+    }
+  }
+}
