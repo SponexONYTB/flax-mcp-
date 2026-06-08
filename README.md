@@ -282,6 +282,10 @@ registry.registerBatch(createMyTools());
 
 ## Credits
 
+<p align="center">
+  <img src="https://flaxengine.com/wp-content/uploads/2020/12/logo_1_150x100.png" alt="Flax Engine Logo" width="300">
+</p>
+
 Built for **[Flax Engine](https://flaxengine.com/)** — the open-source game engine by [Flax](https://flaxengine.com/). Massive thanks to the Flax team and community for building an incredible engine with first-class C# scripting and editor extensibility.
 
 - Flax Engine: https://flaxengine.com/
