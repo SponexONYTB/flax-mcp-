@@ -1,38 +1,32 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Report a bug in Flax MCP
 title: ''
-labels: ''
+labels: bug
 assignees: ''
 
 ---
 
 **Describe the bug**
-A clear and concise description of what the bug is.
+A clear and concise description of the bug.
 
 **To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+Steps:
+1. Tool name and params used
+2. Flax Editor log output
+3. Bridge/MCP server error output
+4. What happened vs expected
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+**Environment**
+- Flax Engine version: [e.g. 1.12.6912]
+- OS: [e.g. Windows 11]
+- AI Client: [e.g. Claude Desktop, Cursor]
+- Plugin branch/commit: [e.g. v0.1.0-alpha]
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
-
-**Desktop (please complete the following information):**
- - OS: [e.g. iOS]
- - Browser [e.g. chrome, safari]
- - Version [e.g. 22]
-
-**Smartphone (please complete the following information):**
- - Device: [e.g. iPhone6]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
+**Logs**
+```
+Paste Flax Editor output log or bridge error here
+```
 
 **Additional context**
-Add any other context about the problem here.
+Add any other context or screenshots.
