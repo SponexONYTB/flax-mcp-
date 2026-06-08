@@ -288,6 +288,8 @@ registry.registerBatch(createMyTools());
 
 Built for **[Flax Engine](https://flaxengine.com/)** — the open-source game engine by [Flax](https://flaxengine.com/). Massive thanks to the Flax team and community for building an incredible engine with first-class C# scripting and editor extensibility.
 
+> **Disclaimer:** This project is **not affiliated**, endorsed, or sponsored by the Flax Engine team. It is an independent integration created by [SponexONYTB](https://github.com/SponexONYTB).
+
 - Flax Engine: https://flaxengine.com/
 - Flax GitHub: https://github.com/FlaxEngine/FlaxEngine
 - Flax Docs: https://docs.flaxengine.com/
