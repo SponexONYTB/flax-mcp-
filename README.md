@@ -280,6 +280,17 @@ registry.registerBatch(createMyTools());
 
 ---
 
+## Credits
+
+Built for **[Flax Engine](https://flaxengine.com/)** — the open-source game engine by [Flax](https://flaxengine.com/). Massive thanks to the Flax team and community for building an incredible engine with first-class C# scripting and editor extensibility.
+
+- Flax Engine: https://flaxengine.com/
+- Flax GitHub: https://github.com/FlaxEngine/FlaxEngine
+- Flax Docs: https://docs.flaxengine.com/
+- Flax Discord: https://discord.gg/flax
+
+---
+
 ## Safety
 
 Enable command whitelist via `FLAX_TOOL_WHITELIST` env var:
