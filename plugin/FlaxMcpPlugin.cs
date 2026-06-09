@@ -21,7 +21,7 @@ public class FlaxMcpPlugin : GamePlugin
         while (_pendingActions.TryDequeue(out var action))
         {
             try { action(); }
-            catch (Exception ex) { Debug.Log("[FlaxMcp] Error in pending action: " + ex.Message); }
+            catch (Exception ex) { Debug.Log("[FlaxMcp] Pending action error: " + ex.Message); }
         }
     }
 
@@ -45,7 +45,16 @@ public class FlaxMcpPlugin : GamePlugin
             return Router.ErrorResponse(ex.Message);
         }
 
-        // Queue for main thread via Scripting.Update
+        // Re-subscribe (safe even if already subscribed)
+        Scripting.Update -= ProcessPendingActions;
+        Scripting.Update += ProcessPendingActions;
+
+        // Re-subscribe (safe even if already subscribed)
+        Scripting.Update -= ProcessPendingActions;
+        Scripting.Update += ProcessPendingActions;
+        Debug.Log("[FlaxMcp] Subscribed to Scripting.Update");
+
+        // Queue for main thread and wait
         string queuedResult = null;
         var done = new ManualResetEvent(false);
 
@@ -80,6 +89,7 @@ public class FlaxMcpPlugin : GamePlugin
     static FlaxMcpPlugin()
     {
         AppDomain.CurrentDomain.DomainUnload += (_, _) => StopServer();
+        Scripting.Update += ProcessPendingActions;
         StartServer();
     }
 
@@ -107,13 +117,11 @@ public class FlaxMcpPlugin : GamePlugin
     public override void Initialize()
     {
         base.Initialize();
-        Scripting.Update += ProcessPendingActions;
         StartServer();
     }
 
     public override void Deinitialize()
     {
-        Scripting.Update -= ProcessPendingActions;
         StopServer();
         Debug.Log("[FlaxMcp] Plugin deinitialized");
         base.Deinitialize();
@@ -528,6 +536,7 @@ internal static class Router
         { "select_actor", SelectActor },
         { "import_asset", ImportAsset },
         { "assign_material", AssignMaterial },
+        { "set_actor_color", SetActorColor },
         { "get_assets", GetAssets },
         { "play_control", PlayControl },
         { "take_screenshot", TakeScreenshot },
@@ -910,6 +919,30 @@ internal static class Router
             throw new Exception("Invalid material slot index");
         slots[slot].Material = mat;
         return new Dictionary<string, object> { { "actorId", V<string>(args, "actorId") }, { "slot", (long)slot }, { "material", matPath } };
+    }
+
+    private static object SetActorColor(Dictionary<string, object> args)
+    {
+        var actor = FindActor(args);
+        if (actor == null) throw new Exception("Actor not found");
+        var sm = actor as StaticModel;
+        if (sm == null) throw new Exception("Actor is not a StaticModel");
+        var colorObj = args.ContainsKey("color") ? args["color"] : null;
+        if (!(colorObj is List<object> colorList) || colorList.Count < 3)
+            throw new Exception("'color' must be an array of 3 or 4 floats (r,g,b[,a])");
+        var r = Convert.ToSingle(colorList[0]);
+        var g = Convert.ToSingle(colorList[1]);
+        var b = Convert.ToSingle(colorList[2]);
+        var a = colorList.Count > 3 ? Convert.ToSingle(colorList[3]) : 1f;
+        var slot = V(args, "materialSlotIndex", 0);
+        var instance = sm.CreateAndSetVirtualMaterialInstance(slot);
+        instance.SetParameterValue("Color", new Color(r, g, b, a));
+        return new Dictionary<string, object>
+        {
+            { "actorId", actor.ID.ToString() },
+            { "slot", (long)slot },
+            { "color", new List<double> { r, g, b, a } },
+        };
     }
 
     private static object GetAssets(Dictionary<string, object> args)
