@@ -517,6 +517,7 @@ internal static class Router
         { "get_console_logs", GetConsoleLogs },
         { "get_project_info", GetProjectInfo },
         { "screenshot_camera", ScreenshotCamera },
+        { "modify_light", ModifyLight },
     };
 
     public static string Dispatch(string json)
@@ -1481,6 +1482,38 @@ internal static class Router
 
         Editor.TakeScreenshot(path);
         return new Dictionary<string, object> { { "path", path }, { "cameraId", camera?.ID.ToString() ?? "viewport" } };
+    }
+
+    private static object ModifyLight(Dictionary<string, object> args)
+    {
+        var actorId = V<string>(args, "actorId");
+        if (string.IsNullOrEmpty(actorId)) throw new Exception("actorId required");
+        var sb = new StringBuilder();
+        sb.Append("var _a=FlaxEngine.Level.FindActor(new System.Guid(\"").Append(actorId).Append("\"));if(_a!=null){");
+        if (args.ContainsKey("brightness"))
+        {
+            var b = Convert.ToSingle(args["brightness"]);
+            sb.Append("_a.GetType().GetProperty(\"Brightness\")?.SetValue(_a,").Append(b.ToString("G")).Append("f);");
+        }
+        if (args.ContainsKey("color"))
+        {
+            var col = args["color"] as List<object>;
+            if (col != null && col.Count >= 3)
+            {
+                var r = Convert.ToSingle(col[0]);
+                var g = Convert.ToSingle(col[1]);
+                var b = Convert.ToSingle(col[2]);
+                var a = col.Count > 3 ? Convert.ToSingle(col[3]) : 1f;
+                sb.Append("_a.GetType().GetProperty(\"Color\")?.SetValue(_a,new FlaxEngine.Color(")
+                    .Append(r.ToString("G")).Append("f,")
+                    .Append(g.ToString("G")).Append("f,")
+                    .Append(b.ToString("G")).Append("f,")
+                    .Append(a.ToString("G")).Append("f));");
+            }
+        }
+        sb.Append("}");
+        Editor.ExecuteCode(sb.ToString());
+        return new Dictionary<string, object> { { "actorId", actorId }, { "modified", true } };
     }
 }
 
