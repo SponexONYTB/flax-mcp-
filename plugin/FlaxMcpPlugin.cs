@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
@@ -13,27 +14,67 @@ using FlaxEngine;
 public class FlaxMcpPlugin : GamePlugin
 {
     private static McpServer _server;
-    private static readonly Queue<Action> _cmdQueue = new Queue<Action>();
-    private static readonly object _cmdLock = new object();
-    private static bool _subscribed;
+    private static ConcurrentQueue<Action> _pendingActions = new ConcurrentQueue<Action>();
 
-    internal static void EnqueueMainThread(Action action)
+    private static void ProcessPendingActions()
     {
-        lock (_cmdLock) { _cmdQueue.Enqueue(action); }
-    }
-
-    private static void OnScriptingUpdate()
-    {
-        Action action = null;
-        lock (_cmdLock)
-        {
-            if (_cmdQueue.Count > 0) action = _cmdQueue.Dequeue();
-        }
-        if (action != null)
+        while (_pendingActions.TryDequeue(out var action))
         {
             try { action(); }
-            catch (Exception ex) { Debug.Log("[FlaxMcp] Command error: " + ex.Message); }
+            catch (Exception ex) { Debug.Log("[FlaxMcp] Error in pending action: " + ex.Message); }
         }
+    }
+
+    internal static string DispatchOnMainThread(string text)
+    {
+        // First try direct execution (works for read-only ops and some writes)
+        try
+        {
+            Debug.Log("[FlaxMcp] Dispatching: " + (text.Length > 50 ? text.Substring(0, 50) + "..." : text));
+            var result = Router.Dispatch(text);
+            Debug.Log("[FlaxMcp] Dispatch OK, result length: " + (result?.Length ?? 0));
+            return result;
+        }
+        catch (Exception ex) when (ex.Message.Contains("main thread"))
+        {
+            Debug.Log("[FlaxMcp] Needs main thread: " + ex.Message);
+        }
+        catch (Exception ex)
+        {
+            Debug.Log("[FlaxMcp] Direct dispatch error: " + ex.Message);
+            return Router.ErrorResponse(ex.Message);
+        }
+
+        // Queue for main thread via Scripting.Update
+        string queuedResult = null;
+        var done = new ManualResetEvent(false);
+
+        _pendingActions.Enqueue(() =>
+        {
+            try
+            {
+                Debug.Log("[FlaxMcp] Dispatching (main thread): " + (text.Length > 50 ? text.Substring(0, 50) + "..." : text));
+                queuedResult = Router.Dispatch(text);
+                Debug.Log("[FlaxMcp] Main thread dispatch OK, result length: " + (queuedResult?.Length ?? 0));
+            }
+            catch (Exception ex)
+            {
+                Debug.Log("[FlaxMcp] Main thread dispatch error: " + ex.Message);
+                queuedResult = Router.ErrorResponse(ex.Message);
+            }
+            finally
+            {
+                done.Set();
+            }
+        });
+
+        if (!done.WaitOne(10000))
+        {
+            Debug.Log("[FlaxMcp] Main thread dispatch timed out");
+            return Router.ErrorResponse("Main thread dispatch timed out");
+        }
+
+        return queuedResult;
     }
 
     static FlaxMcpPlugin()
@@ -66,22 +107,13 @@ public class FlaxMcpPlugin : GamePlugin
     public override void Initialize()
     {
         base.Initialize();
+        Scripting.Update += ProcessPendingActions;
         StartServer();
-        if (!_subscribed)
-        {
-            Scripting.Update += OnScriptingUpdate;
-            _subscribed = true;
-            Debug.Log("[FlaxMcp] Subscribed to Scripting.Update");
-        }
     }
 
     public override void Deinitialize()
     {
-        if (_subscribed)
-        {
-            Scripting.Update -= OnScriptingUpdate;
-            _subscribed = false;
-        }
+        Scripting.Update -= ProcessPendingActions;
         StopServer();
         Debug.Log("[FlaxMcp] Plugin deinitialized");
         base.Deinitialize();
@@ -149,16 +181,41 @@ internal class ClientHandler
             _stream = _client.GetStream();
             var buf = new byte[8192];
 
+            var leftover = 0;
+
             while (_client.Connected)
             {
-                int n = _stream.Read(buf, 0, buf.Length);
-                if (n == 0) break;
+                if (leftover == 0)
+                {
+                    int nr = _stream.Read(buf, 0, buf.Length);
+                    if (nr == 0) break;
+                    leftover = nr;
+                }
+
+                var n = leftover;
+                leftover = 0;
 
                 if (!_handshakeDone)
                 {
-                    DoHandshake(Encoding.UTF8.GetString(buf, 0, n));
-                    _handshakeDone = true;
-                    continue;
+                    var header = Encoding.UTF8.GetString(buf, 0, n);
+                    var end = header.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+                    if (end >= 0)
+                    {
+                        DoHandshake(header.Substring(0, end + 4));
+                        _handshakeDone = true;
+                        var consumed = end + 4;
+                        if (n > consumed)
+                        {
+                            Buffer.BlockCopy(buf, consumed, buf, 0, n - consumed);
+                            leftover = n - consumed;
+                        }
+                        continue;
+                    }
+                    else
+                    {
+                        leftover = n;
+                        continue;
+                    }
                 }
 
                 var text = Decode(buf, n);
@@ -184,8 +241,7 @@ internal class ClientHandler
 
     private static string DispatchViaProcessor(string text)
     {
-        // Scripting.Update doesn't fire in editor mode, so execute directly
-        return Router.Dispatch(text);
+        return FlaxMcpPlugin.DispatchOnMainThread(text);
     }
 
     private void DoHandshake(string request)
