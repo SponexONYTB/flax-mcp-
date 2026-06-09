@@ -518,6 +518,11 @@ internal static class Router
         { "get_project_info", GetProjectInfo },
         { "screenshot_camera", ScreenshotCamera },
         { "modify_light", ModifyLight },
+        { "get_actor_properties", GetActorProperties },
+        { "create_primitive", CreatePrimitive },
+        { "scene_environment", SceneEnvironment },
+        { "set_sky", SetSky },
+        { "save_all", SaveAll },
     };
 
     public static string Dispatch(string json)
@@ -598,6 +603,13 @@ internal static class Router
         count++;
         foreach (var child in actor.Children)
             if (child is Actor a) CountActorChildren(a, ref count);
+    }
+
+    private static int CountImmediateChildren(Actor a)
+    {
+        int c = 0;
+        foreach (var child in a.Children) c++;
+        return c;
     }
 
     private static EditorReflection _editor;
@@ -1514,6 +1526,131 @@ internal static class Router
         sb.Append("}");
         Editor.ExecuteCode(sb.ToString());
         return new Dictionary<string, object> { { "actorId", actorId }, { "modified", true } };
+    }
+
+    private static object GetActorProperties(Dictionary<string, object> args)
+    {
+        var actor = FindActor(args);
+        if (actor == null) throw new Exception("Actor not found");
+        var result = new Dictionary<string, object>
+        {
+            { "id", actor.ID.ToString() },
+            { "name", actor.Name },
+            { "type", actor.GetType().Name },
+            { "isActive", actor.IsActive },
+            { "children", CountImmediateChildren(actor) },
+        };
+        var p = actor.Position;
+        var r = actor.EulerAngles;
+        var s = actor.Scale;
+        result["position"] = new List<double> { p.X, p.Y, p.Z };
+        result["rotation"] = new List<double> { r.X, r.Y, r.Z };
+        result["scale"] = new List<double> { s.X, s.Y, s.Z };
+        if (actor is StaticModel sm && sm.Model != null)
+        {
+            result["modelPath"] = sm.Model.Path;
+            var slots = sm.Model.MaterialSlots;
+            var mats = new List<object>();
+            foreach (var slot in slots)
+                mats.Add(slot.Material?.Path ?? "null");
+            result["materials"] = mats;
+        }
+        if (actor is Light light)
+        {
+            result["brightness"] = (double)light.Brightness;
+            var lc = light.Color;
+            result["lightColor"] = new List<double> { lc.R, lc.G, lc.B, lc.A };
+        }
+        return result;
+    }
+
+    private static object CreatePrimitive(Dictionary<string, object> args)
+    {
+        var shape = V<string>(args, "shape") ?? "cube";
+        var name = V<string>(args, "name") ?? shape;
+        var px = GV3(args, "position", 0, 0);
+        var py = GV3(args, "position", 1, 0);
+        var pz = GV3(args, "position", 2, 0);
+        var sx = GV3(args, "scale", 0, 1);
+        var sy = GV3(args, "scale", 1, 1);
+        var sz = GV3(args, "scale", 2, 1);
+        var modelPath = "engine/Models/" + shape.Substring(0, 1).ToUpper() + shape.Substring(1).ToLower();
+        var sm = new StaticModel();
+        sm.Name = name;
+        sm.Position = new Vector3((float)px, (float)py, (float)pz);
+        sm.Scale = new Vector3((float)sx, (float)sy, (float)sz);
+        var mdl = Content.LoadAsync<Model>(modelPath);
+        if (mdl != null) sm.Model = mdl;
+        Level.SpawnActor(sm);
+        Editor.Select(sm);
+        return new Dictionary<string, object> { { "actorId", sm.ID.ToString() }, { "name", name }, { "shape", shape } };
+    }
+
+    private static object SceneEnvironment(Dictionary<string, object> args)
+    {
+        var sb = new StringBuilder("var _sc=FlaxEngine.Level.Scenes[0];if(_sc!=null){");
+        if (args.ContainsKey("ambientColor"))
+        {
+            var col = args["ambientColor"] as List<object>;
+            if (col != null && col.Count >= 3)
+            {
+                var r = Convert.ToSingle(col[0]);
+                var g = Convert.ToSingle(col[1]);
+                var b = Convert.ToSingle(col[2]);
+                var a = col.Count > 3 ? Convert.ToSingle(col[3]) : 1f;
+                sb.Append("_sc.GetType().GetProperty(\"AmbientLight\")?.SetValue(_sc,new FlaxEngine.Color(")
+                    .Append(r.ToString("G")).Append("f,").Append(g.ToString("G")).Append("f,")
+                    .Append(b.ToString("G")).Append("f,").Append(a.ToString("G")).Append("f));");
+            }
+        }
+        if (args.ContainsKey("ambientBrightness"))
+        {
+            var b = Convert.ToSingle(args["ambientBrightness"]);
+            sb.Append("_sc.GetType().GetProperty(\"AmbientBrightness\")?.SetValue(_sc,").Append(b.ToString("G")).Append("f);");
+        }
+        sb.Append("}");
+        Editor.ExecuteCode(sb.ToString());
+        return new Dictionary<string, object> { { "modified", true } };
+    }
+
+    private static object SetSky(Dictionary<string, object> args)
+    {
+        var skyId = V<string>(args, "actorId") ?? "bc813767-6609-4766-8045-97b0a11915a2";
+        var sb = new StringBuilder("var _sk=FlaxEngine.Level.FindActor(new System.Guid(\"").Append(skyId).Append("\"));if(_sk!=null){");
+        if (args.ContainsKey("sunColor"))
+        {
+            var col = args["sunColor"] as List<object>;
+            if (col != null && col.Count >= 3)
+            {
+                var r = Convert.ToSingle(col[0]);
+                var g = Convert.ToSingle(col[1]);
+                var b = Convert.ToSingle(col[2]);
+                var a = col.Count > 3 ? Convert.ToSingle(col[3]) : 1f;
+                sb.Append("_sk.GetType().GetProperty(\"SunColor\")?.SetValue(_sk,new FlaxEngine.Color(")
+                    .Append(r.ToString("G")).Append("f,").Append(g.ToString("G")).Append("f,")
+                    .Append(b.ToString("G")).Append("f,").Append(a.ToString("G")).Append("f));");
+            }
+        }
+        if (args.ContainsKey("sunBrightness"))
+        {
+            var b = Convert.ToSingle(args["sunBrightness"]);
+            sb.Append("_sk.GetType().GetProperty(\"SunBrightness\")?.SetValue(_sk,").Append(b.ToString("G")).Append("f);");
+        }
+        sb.Append("}");
+        Editor.ExecuteCode(sb.ToString());
+        return new Dictionary<string, object> { { "skyId", skyId }, { "modified", true } };
+    }
+
+    private static object SaveAll(Dictionary<string, object> args)
+    {
+        var sb = new StringBuilder();
+        sb.Append("var _e=FlaxEditor.Editor.Instance;");
+        sb.Append("var _se=_e.GetType().GetField(\"SceneEditing\").GetValue(_e);");
+        sb.Append("_e.GetType().GetMethod(\"SaveScene\")?.Invoke(_se,new object[]{null});");
+        sb.Append("var _proj=_e.GetType().GetField(\"Project\").GetValue(_e);");
+        sb.Append("var _pm=_proj.GetType().GetMethod(\"Save\");if(_pm!=null)_pm.Invoke(_proj,null);");
+        Editor.ExecuteCode(sb.ToString());
+        return new Dictionary<string, object> { { "saved", true } };
     }
 }
 
