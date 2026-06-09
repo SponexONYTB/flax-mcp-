@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
@@ -14,20 +13,9 @@ using FlaxEngine;
 public class FlaxMcpPlugin : GamePlugin
 {
     private static McpServer _server;
-    private static ConcurrentQueue<Action> _pendingActions = new ConcurrentQueue<Action>();
-
-    private static void ProcessPendingActions()
-    {
-        while (_pendingActions.TryDequeue(out var action))
-        {
-            try { action(); }
-            catch (Exception ex) { Debug.Log("[FlaxMcp] Pending action error: " + ex.Message); }
-        }
-    }
 
     internal static string DispatchOnMainThread(string text)
     {
-        // First try direct execution (works for read-only ops and some writes)
         try
         {
             Debug.Log("[FlaxMcp] Dispatching: " + (text.Length > 50 ? text.Substring(0, 50) + "..." : text));
@@ -35,61 +23,16 @@ public class FlaxMcpPlugin : GamePlugin
             Debug.Log("[FlaxMcp] Dispatch OK, result length: " + (result?.Length ?? 0));
             return result;
         }
-        catch (Exception ex) when (ex.Message.Contains("main thread"))
-        {
-            Debug.Log("[FlaxMcp] Needs main thread: " + ex.Message);
-        }
         catch (Exception ex)
         {
             Debug.Log("[FlaxMcp] Direct dispatch error: " + ex.Message);
             return Router.ErrorResponse(ex.Message);
         }
-
-        // Re-subscribe (safe even if already subscribed)
-        Scripting.Update -= ProcessPendingActions;
-        Scripting.Update += ProcessPendingActions;
-
-        // Re-subscribe (safe even if already subscribed)
-        Scripting.Update -= ProcessPendingActions;
-        Scripting.Update += ProcessPendingActions;
-        Debug.Log("[FlaxMcp] Subscribed to Scripting.Update");
-
-        // Queue for main thread and wait
-        string queuedResult = null;
-        var done = new ManualResetEvent(false);
-
-        _pendingActions.Enqueue(() =>
-        {
-            try
-            {
-                Debug.Log("[FlaxMcp] Dispatching (main thread): " + (text.Length > 50 ? text.Substring(0, 50) + "..." : text));
-                queuedResult = Router.Dispatch(text);
-                Debug.Log("[FlaxMcp] Main thread dispatch OK, result length: " + (queuedResult?.Length ?? 0));
-            }
-            catch (Exception ex)
-            {
-                Debug.Log("[FlaxMcp] Main thread dispatch error: " + ex.Message);
-                queuedResult = Router.ErrorResponse(ex.Message);
-            }
-            finally
-            {
-                done.Set();
-            }
-        });
-
-        if (!done.WaitOne(10000))
-        {
-            Debug.Log("[FlaxMcp] Main thread dispatch timed out");
-            return Router.ErrorResponse("Main thread dispatch timed out");
-        }
-
-        return queuedResult;
     }
 
     static FlaxMcpPlugin()
     {
         AppDomain.CurrentDomain.DomainUnload += (_, _) => StopServer();
-        Scripting.Update += ProcessPendingActions;
         StartServer();
     }
 
@@ -935,15 +878,18 @@ internal static class Router
         var b = Convert.ToSingle(colorList[2]);
         var a = colorList.Count > 3 ? Convert.ToSingle(colorList[3]) : 1f;
         var slot = V(args, "materialSlotIndex", 0);
-        var instance = sm.CreateAndSetVirtualMaterialInstance(slot);
-        instance.SetParameterValue("Color", new Color(r, g, b, a));
+        var id = actor.ID.ToString();
+        var code = $"var _a=FlaxEngine.Level.FindActor(new System.Guid(\"{id}\"))as FlaxEngine.StaticModel;if(_a!=null){{var _m=_a.Model;var _s=_m.MaterialSlots;var _i=_s[{slot}].Material.CreateVirtualInstance();_i.SetParameterValue(\"Color\",new FlaxEngine.Color({r}f,{g}f,{b}f,{a}f));_s[{slot}].Material=_i;}}";
+        Editor.ExecuteCode(code);
         return new Dictionary<string, object>
         {
-            { "actorId", actor.ID.ToString() },
+            { "actorId", id },
             { "slot", (long)slot },
             { "color", new List<double> { r, g, b, a } },
         };
     }
+
+
 
     private static object GetAssets(Dictionary<string, object> args)
     {
