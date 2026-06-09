@@ -1498,15 +1498,12 @@ internal static class Router
 
     private static object ModifyLight(Dictionary<string, object> args)
     {
-        var actorId = V<string>(args, "actorId");
-        if (string.IsNullOrEmpty(actorId)) throw new Exception("actorId required");
-        var sb = new StringBuilder();
-        sb.Append("var _a=FlaxEngine.Level.FindActor(new System.Guid(\"").Append(actorId).Append("\"));if(_a!=null){");
+        var actor = FindActor(args);
+        if (actor == null) throw new Exception("Actor not found");
+        var light = actor as Light;
+        if (light == null) throw new Exception("Actor is not a Light");
         if (args.ContainsKey("brightness"))
-        {
-            var b = Convert.ToSingle(args["brightness"]);
-            sb.Append("_a.GetType().GetProperty(\"Brightness\")?.SetValue(_a,").Append(b.ToString("G")).Append("f);");
-        }
+            light.Brightness = Convert.ToSingle(args["brightness"]);
         if (args.ContainsKey("color"))
         {
             var col = args["color"] as List<object>;
@@ -1516,16 +1513,10 @@ internal static class Router
                 var g = Convert.ToSingle(col[1]);
                 var b = Convert.ToSingle(col[2]);
                 var a = col.Count > 3 ? Convert.ToSingle(col[3]) : 1f;
-                sb.Append("_a.GetType().GetProperty(\"Color\")?.SetValue(_a,new FlaxEngine.Color(")
-                    .Append(r.ToString("G")).Append("f,")
-                    .Append(g.ToString("G")).Append("f,")
-                    .Append(b.ToString("G")).Append("f,")
-                    .Append(a.ToString("G")).Append("f));");
+                light.Color = new Color(r, g, b, a);
             }
         }
-        sb.Append("}");
-        Editor.ExecuteCode(sb.ToString());
-        return new Dictionary<string, object> { { "actorId", actorId }, { "modified", true } };
+        return new Dictionary<string, object> { { "actorId", actor.ID.ToString() }, { "modified", true } };
     }
 
     private static object GetActorProperties(Dictionary<string, object> args)
@@ -1588,7 +1579,9 @@ internal static class Router
 
     private static object SceneEnvironment(Dictionary<string, object> args)
     {
-        var sb = new StringBuilder("var _sc=FlaxEngine.Level.Scenes[0];if(_sc!=null){");
+        var scenes = Level.Scenes;
+        if (scenes == null || scenes.Length == 0) throw new Exception("No scenes loaded");
+        var scene = scenes[0];
         if (args.ContainsKey("ambientColor"))
         {
             var col = args["ambientColor"] as List<object>;
@@ -1598,25 +1591,24 @@ internal static class Router
                 var g = Convert.ToSingle(col[1]);
                 var b = Convert.ToSingle(col[2]);
                 var a = col.Count > 3 ? Convert.ToSingle(col[3]) : 1f;
-                sb.Append("_sc.GetType().GetProperty(\"AmbientLight\")?.SetValue(_sc,new FlaxEngine.Color(")
-                    .Append(r.ToString("G")).Append("f,").Append(g.ToString("G")).Append("f,")
-                    .Append(b.ToString("G")).Append("f,").Append(a.ToString("G")).Append("f));");
+                var ambient = scene.GetType().GetProperty("AmbientLight");
+                if (ambient != null) ambient.SetValue(scene, new Color(r, g, b, a));
             }
         }
         if (args.ContainsKey("ambientBrightness"))
         {
-            var b = Convert.ToSingle(args["ambientBrightness"]);
-            sb.Append("_sc.GetType().GetProperty(\"AmbientBrightness\")?.SetValue(_sc,").Append(b.ToString("G")).Append("f);");
+            var ab = scene.GetType().GetProperty("AmbientBrightness");
+            if (ab != null) ab.SetValue(scene, Convert.ToSingle(args["ambientBrightness"]));
         }
-        sb.Append("}");
-        Editor.ExecuteCode(sb.ToString());
         return new Dictionary<string, object> { { "modified", true } };
     }
 
     private static object SetSky(Dictionary<string, object> args)
     {
-        var skyId = V<string>(args, "actorId") ?? "bc813767-6609-4766-8045-97b0a11915a2";
-        var sb = new StringBuilder("var _sk=FlaxEngine.Level.FindActor(new System.Guid(\"").Append(skyId).Append("\"));if(_sk!=null){");
+        var skyId = V<string>(args, "actorId");
+        if (string.IsNullOrEmpty(skyId)) throw new Exception("Sky actorId required");
+        var sky = Level.FindActor(new Guid(skyId));
+        if (sky == null) throw new Exception("Sky actor not found");
         if (args.ContainsKey("sunColor"))
         {
             var col = args["sunColor"] as List<object>;
@@ -1626,30 +1618,21 @@ internal static class Router
                 var g = Convert.ToSingle(col[1]);
                 var b = Convert.ToSingle(col[2]);
                 var a = col.Count > 3 ? Convert.ToSingle(col[3]) : 1f;
-                sb.Append("_sk.GetType().GetProperty(\"SunColor\")?.SetValue(_sk,new FlaxEngine.Color(")
-                    .Append(r.ToString("G")).Append("f,").Append(g.ToString("G")).Append("f,")
-                    .Append(b.ToString("G")).Append("f,").Append(a.ToString("G")).Append("f));");
+                var sc = sky.GetType().GetProperty("SunColor");
+                if (sc != null) sc.SetValue(sky, new Color(r, g, b, a));
             }
         }
         if (args.ContainsKey("sunBrightness"))
         {
-            var b = Convert.ToSingle(args["sunBrightness"]);
-            sb.Append("_sk.GetType().GetProperty(\"SunBrightness\")?.SetValue(_sk,").Append(b.ToString("G")).Append("f);");
+            var sb = sky.GetType().GetProperty("SunBrightness");
+            if (sb != null) sb.SetValue(sky, Convert.ToSingle(args["sunBrightness"]));
         }
-        sb.Append("}");
-        Editor.ExecuteCode(sb.ToString());
         return new Dictionary<string, object> { { "skyId", skyId }, { "modified", true } };
     }
 
     private static object SaveAll(Dictionary<string, object> args)
     {
-        var sb = new StringBuilder();
-        sb.Append("var _e=FlaxEditor.Editor.Instance;");
-        sb.Append("var _se=_e.GetType().GetField(\"SceneEditing\").GetValue(_e);");
-        sb.Append("_e.GetType().GetMethod(\"SaveScene\")?.Invoke(_se,new object[]{null});");
-        sb.Append("var _proj=_e.GetType().GetField(\"Project\").GetValue(_e);");
-        sb.Append("var _pm=_proj.GetType().GetMethod(\"Save\");if(_pm!=null)_pm.Invoke(_proj,null);");
-        Editor.ExecuteCode(sb.ToString());
+        Editor.SaveScene(null);
         return new Dictionary<string, object> { { "saved", true } };
     }
 }
