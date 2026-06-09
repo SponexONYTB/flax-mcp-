@@ -184,20 +184,8 @@ internal class ClientHandler
 
     private static string DispatchViaProcessor(string text)
     {
-        string resp = null;
-        var done = new ManualResetEvent(false);
-        FlaxMcpPlugin.EnqueueMainThread(() =>
-        {
-            try { resp = Router.Dispatch(text); }
-            catch (Exception ex) { resp = Router.ErrorResponse(ex.Message); }
-            finally { done.Set(); }
-        });
-        if (!done.WaitOne(5000))
-        {
-            // Timeout — execute directly on background thread
-            resp = Router.Dispatch(text);
-        }
-        return resp ?? Router.ErrorResponse("No response from processor");
+        // Scripting.Update doesn't fire in editor mode, so execute directly
+        return Router.Dispatch(text);
     }
 
     private void DoHandshake(string request)
